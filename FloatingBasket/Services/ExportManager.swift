@@ -10,7 +10,7 @@ import Foundation
 import AppKit
 
 @MainActor
-public final class ExportManager: ObservableObject {
+public final class ExportManager {
     public static let shared = ExportManager()
     
     private let textConverters: [FileConverter] = [

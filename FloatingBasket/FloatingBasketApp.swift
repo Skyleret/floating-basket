@@ -13,6 +13,8 @@ import AppKit
 public struct FloatingBasketApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
+    public init() {}
+    
     public var body: some Scene {
         Settings {
             EmptyView()

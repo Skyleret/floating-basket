@@ -8,6 +8,7 @@
 
 import SwiftUI
 import AppKit
+internal import UniformTypeIdentifiers
 
 public final class BasketPanel: NSPanel {
     public init(contentRect: NSRect, backing: NSPanel.BackingStoreType, defer flag: Bool) {
@@ -86,7 +87,7 @@ public struct BasketWindowView: View {
             for provider in providers {
                 if provider.hasItemConformingToTypeIdentifier("public.file-url") {
                     _ = provider.loadObject(ofClass: NSURL.self) { url, _ in
-                        if let fileURL = url as-? URL {
+                        if let fileURL = url as? URL {
                             Task { @MainActor in
                                 items.append(.file(fileURL))
                             }
