@@ -115,38 +115,42 @@ public struct BasketWindowView: View {
         .cornerRadius(14)
         .shadow(color: Color.black.opacity(0.25), radius: 10, x: 0, y: 5)
         // 2. Use native Apple drop handling integrated directly with your IngestionService
-        .onDrop(of: [.fileURL, .image, .text, .item], isTargeted: nil) { providers in
-            for provider in providers {
-                if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-                    provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { urlData, _ in
-                        var fileURL: URL?
-                        if let url = urlData as? URL {
-                            fileURL = url
-                        } else if let data = urlData as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
-                            fileURL = url
-                        } else if let path = urlData as? String {
-                            fileURL = URL(fileURLWithPath: path)
-                        }
-                        if let fileURL = fileURL {
-                            DispatchQueue.main.async { items.append(.file(fileURL)) }
+        .onDrop(of: [.fileURL, .image, .text], isTargeted: nil) { providers in
+            Task {
+                for provider in providers {
+                    // 1. Try loading as a File URL first
+                    if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                        if let url = try? await provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) as? URL {
+                            await MainActor.run { items.append(.file(url)) }
+                            continue
+                        } else if let data = try? await provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) as? Data,
+                                  let url = URL(dataRepresentation: data, relativeTo: nil) {
+                            await MainActor.run { items.append(.file(url)) }
+                            continue
                         }
                     }
-                } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
-                    provider.loadObject(ofClass: NSImage.self) { image, _ in
-                        if let img = image as? NSImage {
-                            DispatchQueue.main.async { items.append(.image(img)) }
+                    
+                    // 2. Try loading as an Image
+                    if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                        if let image = try? await provider.loadItem(forTypeIdentifier: UTType.image.identifier) as? NSImage {
+                            await MainActor.run { items.append(.image(image)) }
+                            continue
+                        } else if let data = try? await provider.loadItem(forTypeIdentifier: UTType.image.identifier) as? Data,
+                                  let image = NSImage(data: data) {
+                            await MainActor.run { items.append(.image(image)) }
+                            continue
                         }
                     }
-                } else if provider.hasItemConformingToTypeIdentifier(UTType.text.identifier) {
-                    provider.loadItem(forTypeIdentifier: UTType.text.identifier, options: nil) { textData, _ in
-                        var textContent: String?
-                        if let str = textData as? String {
-                            textContent = str
-                        } else if let data = textData as? Data {
-                            textContent = String(data: data, encoding: .utf8)
-                        }
-                        if let text = textContent {
-                            DispatchQueue.main.async { items.append(.text(text)) }
+                    
+                    // 3. Try loading as Text
+                    if provider.hasItemConformingToTypeIdentifier(UTType.text.identifier) {
+                        if let text = try? await provider.loadItem(forTypeIdentifier: UTType.text.identifier) as? String {
+                            await MainActor.run { items.append(.text(text)) }
+                            continue
+                        } else if let data = try? await provider.loadItem(forTypeIdentifier: UTType.text.identifier) as? Data,
+                                  let text = String(data: data, encoding: .utf8) {
+                            await MainActor.run { items.append(.text(text)) }
+                            continue
                         }
                     }
                 }
