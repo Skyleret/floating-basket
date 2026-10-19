@@ -18,7 +18,10 @@ public final class BasketPanel: NSPanel {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.titlebarAppearsTransparent = true
-        self.isMovableByWindowBackground = true
+        
+        // Disable full-background window dragging so item drags work properly
+        self.isMovableByWindowBackground = false
+        
         self.standardWindowButton(.closeButton)?.isHidden = true
         self.standardWindowButton(.miniaturizeButton)?.isHidden = true
         self.standardWindowButton(.zoomButton)?.isHidden = true
@@ -57,6 +60,18 @@ public struct BasketWindowView: View {
             }
             .padding(.horizontal, 10)
             .padding(.top, 8)
+            .contentShape(Rectangle()) // Make the whole header area act as a hit target for dragging
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        if let window = NSApp.keyWindow {
+                            var frame = window.frame
+                            frame.origin.x += value.translation.width
+                            frame.origin.y -= value.translation.height // AppKit vs SwiftUI coordinate flip
+                            window.setFrame(frame, display: true)
+                        }
+                    }
+            )
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
