@@ -1,5 +1,5 @@
 //
-//  BasketWindow.swift
+//  BasketPanel.swift
 //  FloatingBasket
 //
 //  Created by Skyler on 18/10/2026.
@@ -23,6 +23,116 @@ public final class BasketPanel: NSPanel {
         self.standardWindowButton(.closeButton)?.isHidden = true
         self.standardWindowButton(.miniaturizeButton)?.isHidden = true
         self.standardWindowButton(.zoomButton)?.isHidden = true
+    }
+}
+
+public struct BasketIngestionWindowView: View {
+    public let payload: BasketPayload
+    @State private var isExpanded = false
+    @State private var mouseUpMonitor: Any?
+    
+    private let exportManager = ExportManager.shared
+    
+    public init(payload: BasketPayload) {
+        self.payload = payload
+    }
+    
+    public var body: some View {
+        Group {
+            if isExpanded {
+                SingleItemWindowView(payload: payload)
+            } else {
+                dropboxView
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isExpanded)
+        .onAppear {
+            setupMouseUpMonitor()
+        }
+        .onDisappear {
+            removeMouseUpMonitor()
+        }
+    }
+    
+    private var dropboxView: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "basket.fill")
+                .font(.system(size: 28))
+                .foregroundColor(.accentColor)
+            
+            Text("Drop here")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(.primary)
+            
+            Text(payload.displayTitle)
+                .font(.system(size: 9))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+        }
+        .frame(width: 120, height: 100)
+        .background(.ultraThinMaterial)
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.accentColor.opacity(0.5), lineWidth: 2)
+        )
+        .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
+        .onDrop(of: [.item, .fileURL, .text, .image], isTargeted: nil) { _ in
+            expandWindow()
+            return true
+        }
+    }
+    
+    private func expandWindow() {
+        guard !isExpanded else { return }
+        isExpanded = true
+        removeMouseUpMonitor()
+        
+        DispatchQueue.main.async {
+            if let window = NSApp.windows.first(where: { $0.contentView?.isDescendant(of: $0.contentView ?? NSView()) ?? false }) ?? NSApp.keyWindow {
+                let currentFrame = window.frame
+                let newSize = NSSize(width: 240, height: 115)
+                let newFrame = NSRect(
+                    x: currentFrame.origin.x - (newSize.width - currentFrame.width) / 2,
+                    y: currentFrame.origin.y - (newSize.height - currentFrame.height) / 2,
+                    width: newSize.width,
+                    height: newSize.height
+                )
+                window.setFrame(newFrame, display: true, animate: true)
+            }
+        }
+    }
+    
+    private func setupMouseUpMonitor() {
+        mouseUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { _ in
+            handleMouseUp()
+        }
+    }
+    
+    private func removeMouseUpMonitor() {
+        if let monitor = mouseUpMonitor {
+            NSEvent.removeMonitor(monitor)
+            mouseUpMonitor = nil
+        }
+    }
+    
+    private func handleMouseUp() {
+        guard !isExpanded else { return }
+        
+        DispatchQueue.main.async {
+            let mouseLocation = NSEvent.mouseLocation
+            if let window = NSApp.windows.first(where: { $0.frame.contains(mouseLocation) && $0 is BasketPanel }) {
+                // Dropped inside this window's frame
+                expandWindow()
+            } else {
+                // Dropped outside all ingestion windows -> Discard
+                NSApp.windows.forEach { window in
+                    if window is BasketPanel {
+                        window.orderOut(nil)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -76,7 +186,6 @@ public struct SingleItemWindowView: View {
                     let converters = exportManager.converters(for: payload)
                     
                     if converters.isEmpty {
-                        // Fallback if no specific converters (e.g. raw file)
                         FormatIconView(title: "Original", extensionLabel: "file", systemImage: "doc.fill") {
                             if case .file(let url) = payload {
                                 return url
@@ -146,7 +255,6 @@ private struct FormatIconView: View {
         .contentShape(Rectangle())
         .onDrag {
             if let fileURL = exportAction() {
-                // Auto-dismiss the window once dragged out (One Window, One File rule)
                 DispatchQueue.main.async {
                     NSApp.keyWindow?.orderOut(nil)
                 }

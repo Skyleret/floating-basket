@@ -64,11 +64,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     
     public func spawnWindow(with payload: BasketPayload) {
         let panel = BasketPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 240, height: 115),
+            contentRect: NSRect(x: 0, y: 0, width: 120, height: 100), // Compact Ingestion Dropbox size
             backing: .buffered,
             defer: false
         )
-        panel.contentView = NSHostingView(rootView: SingleItemWindowView(payload: payload))
+        panel.contentView = NSHostingView(rootView: BasketIngestionWindowView(payload: payload))
         panel.center()
         panel.orderFrontRegardless()
         panel.makeKey()
