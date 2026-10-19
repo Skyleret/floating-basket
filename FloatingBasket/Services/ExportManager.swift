@@ -32,8 +32,9 @@ public final class ExportManager {
             return textConverters
         case .image:
             return imageConverters
-        case .file:
-            return []
+        case .file(let url):
+            // Return a converter that passes the original file through
+            return [OriginalFileConverter(url: url)]
         }
     }
     

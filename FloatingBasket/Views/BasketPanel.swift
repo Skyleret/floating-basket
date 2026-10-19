@@ -27,7 +27,7 @@ public final class BasketPanel: NSPanel {
 }
 
 public struct BasketIngestionWindowView: View {
-    public let payload: BasketPayload
+    @State private var payload: BasketPayload
     @State private var isExpanded = false
     @State private var isHoveredOrTargeted = false
     @State private var mouseUpMonitor: Any?
@@ -35,7 +35,7 @@ public struct BasketIngestionWindowView: View {
     private let exportManager = ExportManager.shared
     
     public init(payload: BasketPayload) {
-        self.payload = payload
+        _payload = State(initialValue: payload)
     }
     
     public var body: some View {
@@ -84,18 +84,114 @@ public struct BasketIngestionWindowView: View {
         )
         .shadow(color: Color.black.opacity(0.25), radius: 10, x: 0, y: 5)
         .contentShape(Rectangle()) // Ensures the entire box catches drops smoothly without gaps
-        .onDrop(of: [.item, .fileURL, .text, .image], isTargeted: Binding(
-            get: { isHoveredOrTargeted },
-            set: { newValue in
-                // Debounce slight edge jitter
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isHoveredOrTargeted = newValue
-                }
+        .onDrop(
+            of: [UTType.fileURL, UTType.text, UTType.image],
+            isTargeted: $isHoveredOrTargeted
+        ) { providers in
+            guard let provider = providers.first else {
+                return false
             }
-        )) { _ in
-            expandWindow()
-            return true
+
+            // Prefer the actual dropped file URL over clipboard contents.
+            if provider.hasItemConformingToTypeIdentifier(
+                UTType.fileURL.identifier
+            ) {
+                provider.loadObject(ofClass: NSURL.self) { object, error in
+                    guard let url = object as? URL, error == nil else {
+                        print("FloatingBasket: Failed to read dropped file: \(error?.localizedDescription ?? "Unknown error")")
+                        return
+                    }
+
+                    let newPayload = Self.payloadForDroppedFile(url)
+
+                    DispatchQueue.main.async {
+                        self.payload = newPayload
+                        self.expandWindow()
+                    }
+                }
+
+                return true
+            }
+
+            // For non-file drops, load plain text if available.
+            if provider.canLoadObject(ofClass: NSString.self) {
+                provider.loadObject(ofClass: NSString.self) { object, error in
+                    guard let string = object as? String, error == nil else {
+                        return
+                    }
+
+                    DispatchQueue.main.async {
+                        self.payload = .text(string)
+                        self.expandWindow()
+                    }
+                }
+
+                return true
+            }
+            if provider.canLoadObject(ofClass: NSImage.self) {
+                provider.loadObject(ofClass: NSImage.self) { object, error in
+                    guard let image = object as? NSImage, error == nil else {
+                        return
+                    }
+
+                    DispatchQueue.main.async {
+                        self.payload = .image(image)
+                        self.expandWindow()
+                    }
+                }
+
+                return true
+            }
+            return false
         }
+    }
+    
+    private static func payloadForDroppedFile(_ url: URL) -> BasketPayload {
+        let ext = url.pathExtension.lowercased()
+
+        // Word documents: extract their text.
+        if ext == "docx",
+           let attributed = try? NSAttributedString(
+               url: url,
+               options: [.documentType: NSAttributedString.DocumentType.officeOpenXML],
+               documentAttributes: nil
+           ) {
+            return .text(
+                attributed.string,
+                metadata: ["sourceFile": url.lastPathComponent]
+            )
+        }
+
+        // Images: preserve them as image payloads.
+        if ["png", "jpg", "jpeg", "heic", "webp"].contains(ext),
+           let image = NSImage(contentsOf: url) {
+            return .image(image)
+        }
+
+        // Text files: read their contents, not their path or clipboard.
+        if ["txt", "md", "html", "xml"].contains(ext),
+           let content = try? String(contentsOf: url, encoding: .utf8) {
+            return .text(
+                content,
+                metadata: ["sourceFile": url.lastPathComponent]
+            )
+        }
+
+        // Rich-text files need decoding rather than reading their raw bytes as text.
+        if ext == "rtf",
+           let attributed = try? NSAttributedString(
+               url: url,
+               options: [.documentType: NSAttributedString.DocumentType.rtf],
+               documentAttributes: nil
+           ) {
+            return .text(
+                attributed.string,
+                metadata: ["sourceFile": url.lastPathComponent]
+            )
+        }
+
+        // Preserve unsupported file types as original files.
+        return .file(url)
     }
     
     private func expandWindow() {
