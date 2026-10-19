@@ -15,7 +15,8 @@ public final class ExportManager {
     
     private let textConverters: [FileConverter] = [
         MarkdownConverter(),
-        PlainTextConverter()
+        PlainTextConverter(),
+        DocxConverter(),
     ]
     
     private let imageConverters: [FileConverter] = [

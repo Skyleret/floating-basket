@@ -14,7 +14,7 @@ public final class IngestionService: Sendable {
     public func parsePasteboard(_ pasteboard: NSPasteboard) -> [BasketPayload] {
         var payloads: [BasketPayload] = []
         
-        // 1. Check for File URLs (Supports .docx and other file types)
+        // 1. Check for File URLs (Supports .docx parsing)
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
             for url in urls {
                 if url.pathExtension.lowercased() == "docx",
