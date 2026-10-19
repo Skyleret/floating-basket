@@ -29,6 +29,7 @@ public final class BasketPanel: NSPanel {
 public struct BasketIngestionWindowView: View {
     public let payload: BasketPayload
     @State private var isExpanded = false
+    @State private var isHoveredOrTargeted = false
     @State private var mouseUpMonitor: Any?
     
     private let exportManager = ExportManager.shared
@@ -46,6 +47,7 @@ public struct BasketIngestionWindowView: View {
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isExpanded)
+        .animation(.easeInOut(duration: 0.2), value: isHoveredOrTargeted)
         .onAppear {
             setupMouseUpMonitor()
         }
@@ -55,52 +57,45 @@ public struct BasketIngestionWindowView: View {
     }
     
     private var dropboxView: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             Image(systemName: "basket.fill")
-                .font(.system(size: 28))
-                .foregroundColor(.accentColor)
+                .font(.system(size: 32))
+                .foregroundColor(isHoveredOrTargeted ? .white : .accentColor)
             
-            Text("Drop here")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundColor(.primary)
+            Text("Drop here to open")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(isHoveredOrTargeted ? .white : .primary)
             
             Text(payload.displayTitle)
-                .font(.system(size: 9))
+                .font(.system(size: 10))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
         }
-        .frame(width: 120, height: 100)
-        .background(.ultraThinMaterial)
-        .cornerRadius(16)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.accentColor.opacity(0.5), lineWidth: 2)
+        .frame(width: 240, height: 115) // Same size as the expanded window
+        .background(
+            isHoveredOrTargeted
+                ? AnyShapeStyle(Color.accentColor)
+                : AnyShapeStyle(.ultraThinMaterial)
         )
-        .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
-        .onDrop(of: [.item, .fileURL, .text, .image], isTargeted: nil) { _ in
-            expandWindow()
-            return true
-        }
+        .cornerRadius(14)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(isHoveredOrTargeted ? Color.primary : Color.accentColor.opacity(0.5), lineWidth: isHoveredOrTargeted ? 2 : 1.5)
+        )
+        .shadow(color: Color.black.opacity(0.25), radius: 10, x: 0, y: 5)
+        .onDrop(of: [.item, .fileURL, .text, .image], isTargeted: Binding(
+                    get: { isHoveredOrTargeted },
+                    set: { isHoveredOrTargeted = $0 }
+                )) { _ in
+                    expandWindow()
+                    return true
+                }
     }
     
     private func expandWindow() {
         guard !isExpanded else { return }
         isExpanded = true
         removeMouseUpMonitor()
-        
-        DispatchQueue.main.async {
-            if let window = NSApp.windows.first(where: { $0.contentView?.isDescendant(of: $0.contentView ?? NSView()) ?? false }) ?? NSApp.keyWindow {
-                let currentFrame = window.frame
-                let newSize = NSSize(width: 240, height: 115)
-                let newFrame = NSRect(
-                    x: currentFrame.origin.x - (newSize.width - currentFrame.width) / 2,
-                    y: currentFrame.origin.y - (newSize.height - currentFrame.height) / 2,
-                    width: newSize.width,
-                    height: newSize.height
-                )
-                window.setFrame(newFrame, display: true, animate: true)
-            }
-        }
     }
     
     private func setupMouseUpMonitor() {
