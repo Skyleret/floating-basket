@@ -32,11 +32,22 @@ public struct BasketWindowView: View {
     
     public var body: some View {
         VStack(spacing: 8) {
+            // In the header HStack:
             HStack {
+                Button(action: {
+                    NSApp.keyWindow?.orderOut(nil)
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Close Basket")
                 Text("FloatingBasket")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.secondary)
                 Spacer()
+                
                 Button(action: { items.removeAll() }) {
                     Image(systemName: "trash")
                         .font(.system(size: 10))
@@ -83,19 +94,40 @@ public struct BasketWindowView: View {
         .cornerRadius(14)
         .shadow(color: Color.black.opacity(0.25), radius: 10, x: 0, y: 5)
         .onDrop(of: [.fileURL, .image, .text], isTargeted: nil) { providers in
-            let ingestion = IngestionService()
             for provider in providers {
                 if provider.hasItemConformingToTypeIdentifier("public.file-url") {
-                    _ = provider.loadObject(ofClass: NSURL.self) { url, _ in
-                        if let fileURL = url as? URL {
+                    provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { (urlData, _) in
+                        var fileURL: URL?
+                        if let url = urlData as? URL {
+                            fileURL = url
+                        } else if let data = urlData as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
+                            fileURL = url
+                        } else if let path = urlData as? String {
+                            fileURL = URL(fileURLWithPath: path)
+                        }
+                        if let fileURL = fileURL {
                             Task { @MainActor in
                                 items.append(.file(fileURL))
                             }
                         }
                     }
-                } else if provider.hasItemConformingToTypeIdentifier("public.utf8-plain-text") {
-                    _ = provider.loadObject(ofClass: NSString.self) { string, _ in
-                        if let text = string as? String {
+                } else if provider.hasItemConformingToTypeIdentifier("public.image") {
+                    provider.loadObject(ofClass: NSImage.self) { image, _ in
+                        if let img = image as? NSImage {
+                            Task { @MainActor in
+                                items.append(.image(img))
+                            }
+                        }
+                    }
+                } else if provider.hasItemConformingToTypeIdentifier("public.utf8-plain-text") || provider.hasItemConformingToTypeIdentifier("public.text") {
+                    provider.loadItem(forTypeIdentifier: "public.utf8-plain-text", options: nil) { (textData, _) in
+                        var textContent: String?
+                        if let str = textData as? String {
+                            textContent = str
+                        } else if let data = textData as? Data {
+                            textContent = String(data: data, encoding: .utf8)
+                        }
+                        if let text = textContent {
                             Task { @MainActor in
                                 items.append(.text(text))
                             }
@@ -143,4 +175,9 @@ private struct ItemThumbnailView: View {
         .frame(width: 70, height: 70)
         .cornerRadius(8)
     }
+}
+#Preview {
+    BasketWindowView()
+        .padding()
+        .background(Color.gray.opacity(0.3))
 }

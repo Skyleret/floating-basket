@@ -53,3 +53,13 @@ public struct ExportOverlayView: View {
         .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
     }
 }
+
+
+#Preview {
+    ExportOverlayView(
+        payload: .text("Hello, FloatingBasket! This is a sample text payload."),
+        converters: [MarkdownConverter(), PlainTextConverter()]
+    )
+    .padding()
+    .background(Color.gray)
+}
