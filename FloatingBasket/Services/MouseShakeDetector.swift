@@ -9,7 +9,7 @@
 import Foundation
 import AppKit
 
-public final class MouseShakeDetector: ObservableObject {
+public final class MouseShakeDetector {
     public static let shared = MouseShakeDetector()
     
     private var eventMonitor: Any?
@@ -17,18 +17,16 @@ public final class MouseShakeDetector: ObservableObject {
     private var shakeCount = 0
     private var lastDirection: CGFloat = 0
     
-    public var onShakeDetected: (() -> Void)?
+    public var onShakeWhileDraggingDetected: (() -> Void)?
     
     private init() {}
     
     public func startMonitoring() {
-        // Monitor global or local mouse movements
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
             self?.processEvent(event)
         }
         
-        // Also monitor local events just in case
-        NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
+        NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
             self?.processEvent(event)
             return event
         }
@@ -42,27 +40,34 @@ public final class MouseShakeDetector: ObservableObject {
     }
     
     private func processEvent(_ event: NSEvent) {
+        // REQUIREMENT: Only trigger if the user is actively dragging/holding down the left mouse button
+        let isDragging = (NSEvent.pressedMouseButtons & 1) != 0 || event.type == .leftMouseDragged
+        guard isDragging else {
+            // Reset shake counters immediately if they aren't dragging
+            shakeCount = 0
+            lastPositions.removeAll()
+            return
+        }
+        
         let currentPoint = NSEvent.mouseLocation
         let currentTime = CACurrentMediaTime()
         
         lastPositions.append((point: currentPoint, time: currentTime))
-        
-        // Keep only the last 0.5 seconds of movement
         lastPositions = lastPositions.filter { currentTime - $0.time < 0.5 }
         
         guard lastPositions.count > 5 else { return }
         
         let deltaX = currentPoint.x - lastPositions[lastPositions.count - 2].point.x
         
-        // Check for significant horizontal movement and direction reversal
         if abs(deltaX) > 5.0 {
             let currentDirection = deltaX > 0 ? 1.0 : -1.0
             if lastDirection != 0 && currentDirection != lastDirection {
                 shakeCount += 1
-                if shakeCount >= 4 { // 4 rapid back-and-forth reversals trigger a shake
+                if shakeCount >= 4 { // 4 rapid back-and-forth reversals while dragging
                     shakeCount = 0
+                    lastPositions.removeAll()
                     DispatchQueue.main.async {
-                        self.onShakeDetected?()
+                        self.onShakeWhileDraggingDetected?()
                     }
                 }
             }

@@ -41,6 +41,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     
     public func applicationDidFinishLaunching(_ notification: Notification) {
         setupBasketWindow()
+        
+        // Only show up when shaking mouse AND dragging something
+        MouseShakeDetector.shared.onShakeWhileDraggingDetected = { [weak self] in
+            guard let self = self, let panel = self.basketPanel, !panel.isVisible else { return }
+            panel.orderFront(nil)
+        }
+        MouseShakeDetector.shared.startMonitoring()
+    }
+    
+    public func applicationWillTerminate(_ notification: Notification) {
+        MouseShakeDetector.shared.stopMonitoring()
     }
     
     private func setupBasketWindow() {
@@ -50,8 +61,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         panel.contentView = NSHostingView(rootView: BasketWindowView())
+        
+        // Handle drops received by the panel
+        panel.onPayloadDropped = { payloads in
+            print("Successfully dropped payloads: \(payloads)")
+            // TODO: Feed payloads into your active view model / basket storage
+        }
+        
         panel.center()
-        panel.orderFront(nil)
+        // Start hidden until shaken while dragging, or toggle via menu bar
+        panel.orderOut(nil)
         self.basketPanel = panel
     }
     

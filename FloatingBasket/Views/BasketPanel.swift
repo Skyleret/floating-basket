@@ -10,6 +10,9 @@ import AppKit
 internal import UniformTypeIdentifiers
 
 public final class BasketPanel: NSPanel {
+    // Callback to handle dropped payloads cleanly
+    public var onPayloadDropped: (([BasketPayload]) -> Void)?
+
     public init(contentRect: NSRect, backing: NSPanel.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: contentRect, styleMask: [.nonactivatingPanel, .titled, .closable, .fullSizeContentView], backing: backing, defer: flag)
         self.isFloatingPanel = true
@@ -22,6 +25,15 @@ public final class BasketPanel: NSPanel {
         self.standardWindowButton(.closeButton)?.isHidden = true
         self.standardWindowButton(.miniaturizeButton)?.isHidden = true
         self.standardWindowButton(.zoomButton)?.isHidden = true
+        
+        // CRITICAL: Register the window to accept drops using correct AppKit PasteboardTypes
+        self.registerForDraggedTypes([
+            .fileURL,
+            .URL,
+            NSPasteboard.PasteboardType(UTType.image.identifier),
+            NSPasteboard.PasteboardType(UTType.text.identifier),
+            NSPasteboard.PasteboardType(UTType.item.identifier)
+        ])
     }
 }
 
@@ -75,7 +87,6 @@ public struct BasketWindowView: View {
                         ForEach(items) { item in
                             ItemThumbnailView(item: item)
                                 .onDrag {
-                                    // Export item using available converters or fall back to raw data
                                     let converters = ExportManager.shared.converters(for: item)
                                     if let converter = converters.first,
                                        let url = try? ExportManager.shared.export(payload: item, using: converter) {
@@ -196,6 +207,7 @@ private struct ItemThumbnailView: View {
         .cornerRadius(8)
     }
 }
+
 #Preview {
     BasketWindowView()
         .padding()
