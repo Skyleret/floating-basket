@@ -2,14 +2,6 @@
 //  DocxConverter.swift
 //  FloatingBasket
 //
-//  Created by Skyler on 10/19/26.
-//
-
-
-//
-//  DocxConverter.swift
-//  FloatingBasket
-//
 //  Created by Skyler on 18/10/2026.
 //
 
