@@ -9,8 +9,7 @@ import SwiftUI
 import AppKit
 internal import UniformTypeIdentifiers
 
-public final class BasketPanel: NSPanel {
-    // Callback to handle dropped payloads cleanly
+public final class BasketPanel: NSPanel, NSDraggingDestination {
     public var onPayloadDropped: (([BasketPayload]) -> Void)?
 
     public init(contentRect: NSRect, backing: NSPanel.BackingStoreType, defer flag: Bool) {
@@ -21,12 +20,12 @@ public final class BasketPanel: NSPanel {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.titlebarAppearsTransparent = true
-        self.isMovableByWindowBackground = true // Allows dragging the window by its background
+        self.isMovableByWindowBackground = true
         self.standardWindowButton(.closeButton)?.isHidden = true
         self.standardWindowButton(.miniaturizeButton)?.isHidden = true
         self.standardWindowButton(.zoomButton)?.isHidden = true
         
-        // CRITICAL: Register the window to accept drops using correct AppKit PasteboardTypes
+        // CRITICAL: Register the window to accept dragged files, images, and text
         self.registerForDraggedTypes([
             .fileURL,
             .URL,
@@ -35,10 +34,33 @@ public final class BasketPanel: NSPanel {
             NSPasteboard.PasteboardType(UTType.item.identifier)
         ])
     }
+    
+    // MARK: - NSDraggingDestination Implementation (Without 'override')
+    
+    public func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        return .copy
+    }
+    
+    public func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        return .copy
+    }
+    
+    public func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let pasteboard = sender.draggingPasteboard
+        let ingestionService = IngestionService()
+        let payloads = ingestionService.parsePasteboard(pasteboard)
+        
+        guard !payloads.isEmpty else { return false }
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.onPayloadDropped?(payloads)
+        }
+        return true
+    }
 }
 
 public struct BasketWindowView: View {
-    @State private var items: [BasketPayload] = []
+    @State public var items: [BasketPayload] = []
     
     public init() {}
     
@@ -124,50 +146,6 @@ public struct BasketWindowView: View {
         .background(.ultraThinMaterial)
         .cornerRadius(14)
         .shadow(color: Color.black.opacity(0.25), radius: 10, x: 0, y: 5)
-        .onDrop(of: [.fileURL, .image, .text], isTargeted: nil) { providers in
-            for provider in providers {
-                if provider.hasItemConformingToTypeIdentifier("public.file-url") {
-                    provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { (urlData, _) in
-                        var fileURL: URL?
-                        if let url = urlData as? URL {
-                            fileURL = url
-                        } else if let data = urlData as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
-                            fileURL = url
-                        } else if let path = urlData as? String {
-                            fileURL = URL(fileURLWithPath: path)
-                        }
-                        if let fileURL = fileURL {
-                            Task { @MainActor in
-                                items.append(.file(fileURL))
-                            }
-                        }
-                    }
-                } else if provider.hasItemConformingToTypeIdentifier("public.image") {
-                    provider.loadObject(ofClass: NSImage.self) { image, _ in
-                        if let img = image as? NSImage {
-                            Task { @MainActor in
-                                items.append(.image(img))
-                            }
-                        }
-                    }
-                } else if provider.hasItemConformingToTypeIdentifier("public.utf8-plain-text") || provider.hasItemConformingToTypeIdentifier("public.text") {
-                    provider.loadItem(forTypeIdentifier: "public.utf8-plain-text", options: nil) { (textData, _) in
-                        var textContent: String?
-                        if let str = textData as? String {
-                            textContent = str
-                        } else if let data = textData as? Data {
-                            textContent = String(data: data, encoding: .utf8)
-                        }
-                        if let text = textContent {
-                            Task { @MainActor in
-                                items.append(.text(text))
-                            }
-                        }
-                    }
-                }
-            }
-            return true
-        }
     }
 }
 
