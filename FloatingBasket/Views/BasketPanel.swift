@@ -11,7 +11,7 @@ internal import UniformTypeIdentifiers
 
 public final class BasketPanel: NSPanel {
     public init(contentRect: NSRect, backing: NSPanel.BackingStoreType, defer flag: Bool) {
-        super.init(contentRect: contentRect, styleMask: [.nonactivatingPanel, .titled, .closable, .fullSizeContentView], backing: backing, defer: flag)
+        super.init(contentRect: contentRect, styleMask: [.nonactivatingPanel, .borderless, .titled, .closable, .fullSizeContentView], backing: backing, defer: flag)
         self.isFloatingPanel = true
         self.level = .floating
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -83,13 +83,19 @@ public struct BasketIngestionWindowView: View {
                 .stroke(isHoveredOrTargeted ? Color.primary : Color.accentColor.opacity(0.5), lineWidth: isHoveredOrTargeted ? 2 : 1.5)
         )
         .shadow(color: Color.black.opacity(0.25), radius: 10, x: 0, y: 5)
+        .contentShape(Rectangle()) // Ensures the entire box catches drops smoothly without gaps
         .onDrop(of: [.item, .fileURL, .text, .image], isTargeted: Binding(
-                    get: { isHoveredOrTargeted },
-                    set: { isHoveredOrTargeted = $0 }
-                )) { _ in
-                    expandWindow()
-                    return true
+            get: { isHoveredOrTargeted },
+            set: { newValue in
+                // Debounce slight edge jitter
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isHoveredOrTargeted = newValue
                 }
+            }
+        )) { _ in
+            expandWindow()
+            return true
+        }
     }
     
     private func expandWindow() {
