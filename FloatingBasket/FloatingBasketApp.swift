@@ -61,15 +61,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         panel.contentView = NSHostingView(rootView: BasketWindowView())
-        
-        // Handle drops received by the panel
-        panel.onPayloadDropped = { payloads in
-            print("Successfully dropped payloads: \(payloads)")
-            // TODO: Feed payloads into your active view model / basket storage
-        }
-        
         panel.center()
-        // Start hidden until shaken while dragging, or toggle via menu bar
         panel.orderOut(nil)
         self.basketPanel = panel
     }

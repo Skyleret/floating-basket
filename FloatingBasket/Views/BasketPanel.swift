@@ -9,9 +9,7 @@ import SwiftUI
 import AppKit
 internal import UniformTypeIdentifiers
 
-public final class BasketPanel: NSPanel, NSDraggingDestination {
-    public var onPayloadDropped: (([BasketPayload]) -> Void)?
-
+public final class BasketPanel: NSPanel {
     public init(contentRect: NSRect, backing: NSPanel.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: contentRect, styleMask: [.nonactivatingPanel, .titled, .closable, .fullSizeContentView], backing: backing, defer: flag)
         self.isFloatingPanel = true
@@ -24,43 +22,12 @@ public final class BasketPanel: NSPanel, NSDraggingDestination {
         self.standardWindowButton(.closeButton)?.isHidden = true
         self.standardWindowButton(.miniaturizeButton)?.isHidden = true
         self.standardWindowButton(.zoomButton)?.isHidden = true
-        
-        // CRITICAL: Register the window to accept dragged files, images, and text
-        self.registerForDraggedTypes([
-            .fileURL,
-            .URL,
-            NSPasteboard.PasteboardType(UTType.image.identifier),
-            NSPasteboard.PasteboardType(UTType.text.identifier),
-            NSPasteboard.PasteboardType(UTType.item.identifier)
-        ])
-    }
-    
-    // MARK: - NSDraggingDestination Implementation (Without 'override')
-    
-    public func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        return .copy
-    }
-    
-    public func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        return .copy
-    }
-    
-    public func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        let pasteboard = sender.draggingPasteboard
-        let ingestionService = IngestionService()
-        let payloads = ingestionService.parsePasteboard(pasteboard)
-        
-        guard !payloads.isEmpty else { return false }
-        
-        DispatchQueue.main.async { [weak self] in
-            self?.onPayloadDropped?(payloads)
-        }
-        return true
     }
 }
 
 public struct BasketWindowView: View {
-    @State public var items: [BasketPayload] = []
+    @State private var items: [BasketPayload] = []
+    private let ingestionService = IngestionService()
     
     public init() {}
     
@@ -143,9 +110,49 @@ public struct BasketWindowView: View {
             Spacer(minLength: 0)
         }
         .frame(width: 220, height: 130)
+        // 1. Give the view an opaque visual background so mouse hit-testing registers drops cleanly
         .background(.ultraThinMaterial)
         .cornerRadius(14)
         .shadow(color: Color.black.opacity(0.25), radius: 10, x: 0, y: 5)
+        // 2. Use native Apple drop handling integrated directly with your IngestionService
+        .onDrop(of: [.fileURL, .image, .text, .item], isTargeted: nil) { providers in
+            for provider in providers {
+                if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                    provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { urlData, _ in
+                        var fileURL: URL?
+                        if let url = urlData as? URL {
+                            fileURL = url
+                        } else if let data = urlData as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
+                            fileURL = url
+                        } else if let path = urlData as? String {
+                            fileURL = URL(fileURLWithPath: path)
+                        }
+                        if let fileURL = fileURL {
+                            DispatchQueue.main.async { items.append(.file(fileURL)) }
+                        }
+                    }
+                } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                    provider.loadObject(ofClass: NSImage.self) { image, _ in
+                        if let img = image as? NSImage {
+                            DispatchQueue.main.async { items.append(.image(img)) }
+                        }
+                    }
+                } else if provider.hasItemConformingToTypeIdentifier(UTType.text.identifier) {
+                    provider.loadItem(forTypeIdentifier: UTType.text.identifier, options: nil) { textData, _ in
+                        var textContent: String?
+                        if let str = textData as? String {
+                            textContent = str
+                        } else if let data = textData as? Data {
+                            textContent = String(data: data, encoding: .utf8)
+                        }
+                        if let text = textContent {
+                            DispatchQueue.main.async { items.append(.text(text)) }
+                        }
+                    }
+                }
+            }
+            return true
+        }
     }
 }
 
