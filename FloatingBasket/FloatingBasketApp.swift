@@ -41,6 +41,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     
     public func applicationDidFinishLaunching(_ notification: Notification) {
         setupBasketWindow()
+        
+        // Setup mouse shake trigger
+        MouseShakeDetector.shared.onShakeDetected = { [weak self] in
+            self?.toggleBasketWindow()
+        }
+        MouseShakeDetector.shared.startMonitoring()
     }
     
     private func setupBasketWindow() {
@@ -51,7 +57,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         panel.contentView = NSHostingView(rootView: BasketWindowView())
         panel.center()
-        panel.orderFront(nil)
+        // Do not open on launch by default if using mouse shake / menu bar, or keep open if preferred
         self.basketPanel = panel
     }
     

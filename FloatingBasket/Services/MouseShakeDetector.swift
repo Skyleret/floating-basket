@@ -9,7 +9,7 @@
 import Foundation
 import AppKit
 
-public final class MouseShakeDetector: ObservableObject {
+public final class MouseShakeDetector {
     public static let shared = MouseShakeDetector()
     
     private var eventMonitor: Any?

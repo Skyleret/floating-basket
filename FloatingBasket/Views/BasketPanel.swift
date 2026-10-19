@@ -18,7 +18,7 @@ public final class BasketPanel: NSPanel {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.titlebarAppearsTransparent = true
-        self.isMovableByWindowBackground = true // Allows dragging the window by its background
+        self.isMovableByWindowBackground = false // Disabled so items can be dragged out without moving window
         self.standardWindowButton(.closeButton)?.isHidden = true
         self.standardWindowButton(.miniaturizeButton)?.isHidden = true
         self.standardWindowButton(.zoomButton)?.isHidden = true
@@ -33,6 +33,10 @@ public struct BasketWindowView: View {
     public var body: some View {
         VStack(spacing: 8) {
             HStack {
+                Image(systemName: "line.3.horizontal")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                                    .help("Drag to move window")
                 Text("FloatingBasket")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.secondary)
@@ -56,7 +60,15 @@ public struct BasketWindowView: View {
             }
             .padding(.horizontal, 10)
             .padding(.top, 8)
-            
+            .gesture(
+                            DragGesture().onChanged { value in
+                                if let window = NSApp.keyWindow {
+                                    let currentOrigin = window.frame.origin
+                                    let newOrigin = NSPoint(x: currentOrigin.x + value.translation.width, y: currentOrigin.y - value.translation.height)
+                                    window.setFrameOrigin(newOrigin)
+                                }
+                            }
+                    )
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     if items.isEmpty {
