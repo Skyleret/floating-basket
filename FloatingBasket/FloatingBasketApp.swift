@@ -1,10 +1,9 @@
 //
-//  FloatingBasketApp 2.swift
+//  FloatingBasketApp.swift
 //  FloatingBasket
 //
 //  Created by Skyler on 18/10/2026.
 //
-
 
 import SwiftUI
 import AppKit
@@ -21,10 +20,10 @@ public struct FloatingBasketApp: App {
         }
         
         MenuBarExtra("FloatingBasket", systemImage: "basket") {
-            Button("Toggle Basket") {
-                appDelegate.toggleBasketWindow()
+            Button("Paste from Clipboard") {
+                appDelegate.handlePasteFromClipboard()
             }
-            .keyboardShortcut("b", modifiers: [.command, .shift])
+            .keyboardShortcut("v", modifiers: [.command, .shift])
             
             Divider()
             
@@ -37,15 +36,14 @@ public struct FloatingBasketApp: App {
 }
 
 public final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var basketPanel: BasketPanel?
+    private let ingestionService = IngestionService()
     
     public func applicationDidFinishLaunching(_ notification: Notification) {
-        setupBasketWindow()
+        TempCleanupService.shared.startPeriodicCleanup()
         
-        // Only show up when shaking mouse AND dragging something
+        // Triggered when mouse shake + drag is detected
         MouseShakeDetector.shared.onShakeWhileDraggingDetected = { [weak self] in
-            guard let self = self, let panel = self.basketPanel, !panel.isVisible else { return }
-            panel.orderFront(nil)
+            self?.handlePasteFromClipboard()
         }
         MouseShakeDetector.shared.startMonitoring()
     }
@@ -54,24 +52,25 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         MouseShakeDetector.shared.stopMonitoring()
     }
     
-    private func setupBasketWindow() {
+    public func handlePasteFromClipboard() {
+        let pasteboard = NSPasteboard.general
+        let payloads = ingestionService.parsePasteboard(pasteboard)
+        
+        // Enforce "One Window, One File": Spawn a separate floating panel for each payload found
+        for payload in payloads {
+            spawnWindow(with: payload)
+        }
+    }
+    
+    public func spawnWindow(with payload: BasketPayload) {
         let panel = BasketPanel(
-            contentRect: NSRect(x: 100, y: 100, width: 220, height: 130),
+            contentRect: NSRect(x: 0, y: 0, width: 240, height: 115),
             backing: .buffered,
             defer: false
         )
-        panel.contentView = NSHostingView(rootView: BasketWindowView())
+        panel.contentView = NSHostingView(rootView: SingleItemWindowView(payload: payload))
         panel.center()
-        panel.orderOut(nil)
-        self.basketPanel = panel
-    }
-    
-    public func toggleBasketWindow() {
-        guard let panel = basketPanel else { return }
-        if panel.isVisible {
-            panel.orderOut(nil)
-        } else {
-            panel.orderFront(nil)
-        }
+        panel.orderFrontRegardless()
+        panel.makeKey()
     }
 }
