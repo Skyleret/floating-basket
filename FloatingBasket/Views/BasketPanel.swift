@@ -5,7 +5,6 @@
 //  Created by Skyler on 18/10/2026.
 //
 
-
 import SwiftUI
 import AppKit
 internal import UniformTypeIdentifiers
@@ -19,6 +18,7 @@ public final class BasketPanel: NSPanel {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.titlebarAppearsTransparent = true
+        self.isMovableByWindowBackground = true // Allows dragging the window by its background
         self.standardWindowButton(.closeButton)?.isHidden = true
         self.standardWindowButton(.miniaturizeButton)?.isHidden = true
         self.standardWindowButton(.zoomButton)?.isHidden = true
@@ -32,8 +32,11 @@ public struct BasketWindowView: View {
     
     public var body: some View {
         VStack(spacing: 8) {
-            // In the header HStack:
             HStack {
+                Text("FloatingBasket")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.secondary)
+                Spacer()
                 Button(action: {
                     NSApp.keyWindow?.orderOut(nil)
                 }) {
@@ -43,10 +46,6 @@ public struct BasketWindowView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Close Basket")
-                Text("FloatingBasket")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.secondary)
-                Spacer()
                 
                 Button(action: { items.removeAll() }) {
                     Image(systemName: "trash")
@@ -76,9 +75,30 @@ public struct BasketWindowView: View {
                         ForEach(items) { item in
                             ItemThumbnailView(item: item)
                                 .onDrag {
-                                    let provider = NSItemProvider()
-                                    // Handle drag out behavior or item reference
-                                    return provider
+                                    // Export item using available converters or fall back to raw data
+                                    let converters = ExportManager.shared.converters(for: item)
+                                    if let converter = converters.first,
+                                       let url = try? ExportManager.shared.export(payload: item, using: converter) {
+                                        return NSItemProvider(object: url as NSURL)
+                                    }
+                                    
+                                    switch item {
+                                    case .text(let text, _):
+                                        return NSItemProvider(object: text as NSString)
+                                    case .image(let image):
+                                        if let tiff = image.tiffRepresentation,
+                                           let rep = NSBitmapImageRep(data: tiff),
+                                           let png = rep.representation(using: .png, properties: [:]) {
+                                            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("FloatingBasket", isDirectory: true)
+                                            try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+                                            let fileURL = tempDir.appendingPathComponent("image-\(UUID().uuidString).png")
+                                            try? png.write(to: fileURL)
+                                            return NSItemProvider(object: fileURL as NSURL)
+                                        }
+                                        return NSItemProvider()
+                                    case .file(let url):
+                                        return NSItemProvider(object: url as NSURL)
+                                    }
                                 }
                         }
                     }
