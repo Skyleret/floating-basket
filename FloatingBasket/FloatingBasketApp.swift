@@ -58,26 +58,34 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let pasteboard = NSPasteboard.general
         let payloads = ingestionService.parsePasteboard(pasteboard)
         
-        // Enforce "One Window, One File": Spawn a separate floating panel for each payload found
+        // Enforce "One Window, One File": Spawn a separate floating panel for each payload found.
         for payload in payloads {
             spawnWindow(with: payload)
         }
     }
     
     /// Shows an empty basket that acts purely as a drop target. The dragged
-    /// item is delivered through the view's `onDrop` handler, so the clipboard
-    /// (which is only populated by an explicit copy) must not be consulted here.
+    /// item is delivered through the view's AppKit drop handler, so the clipboard
+    /// must not be consulted here.
     public func handleShakeWhileDragging() {
         spawnWindow()
     }
     
     public func spawnWindow(with payload: BasketPayload? = nil) {
         let panel = BasketPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 240, height: 115), // Matches BasketIngestionWindowView's frame
+            contentRect: NSRect(x: 0, y: 0, width: 240, height: 115),
             backing: .buffered,
             defer: false
         )
-        panel.contentView = NSHostingView(rootView: BasketIngestionWindowView(payload: payload))
+        panel.contentView = NSHostingView(
+            rootView: BasketIngestionWindowView(
+                payload: payload,
+                onAdditionalDroppedFile: { [weak self] url in
+                    guard let self else { return }
+                    self.spawnWindow(with: BasketIngestionWindowView.payloadForDroppedFile(url))
+                }
+            )
+        )
         panel.center()
         panel.orderFrontRegardless()
         panel.makeKey()

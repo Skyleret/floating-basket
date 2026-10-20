@@ -111,9 +111,14 @@ public struct BasketIngestionWindowView: View {
     @State private var mouseUpMonitor: Any?
     
     private let exportManager = ExportManager.shared
+    private let onAdditionalDroppedFile: (URL) -> Void
     
-    public init(payload: BasketPayload? = nil) {
+    public init(
+        payload: BasketPayload? = nil,
+        onAdditionalDroppedFile: @escaping (URL) -> Void = { _ in }
+    ) {
         _payload = State(initialValue: payload)
+        self.onAdditionalDroppedFile = onAdditionalDroppedFile
     }
     
     public var body: some View {
@@ -164,19 +169,23 @@ public struct BasketIngestionWindowView: View {
         .contentShape(Rectangle()) // Ensures the entire box catches drops smoothly without gaps
         .background(
             AppKitDropTarget(isTargeted: $isHoveredOrTargeted) { pasteboard in
-                // Prefer Finder's original file URL before considering text or image data.
-                if let objects = pasteboard.readObjects(
+                // Prefer all of Finder's original file URLs before considering
+                // text or image data. The current basket takes the first file;
+                // each additional file gets its own floating basket window.
+                let droppedURLs = (pasteboard.readObjects(
                     forClasses: [NSURL.self],
                     options: [.urlReadingFileURLsOnly: true]
-                ) as? [NSURL], let nsURL = objects.first {
-                    // Finder may provide a file-reference URL. Convert it to a
-                    // path-based file URL before passing it to the existing pipeline.
-                    let fileURL = nsURL as URL
-                    let url = fileURL.standardizedFileURL
-                    let newPayload = Self.payloadForDroppedFile(url)
+                ) as? [NSURL] ?? []).map { ($0 as URL).standardizedFileURL }
+
+                if let firstURL = droppedURLs.first {
+                    let additionalURLs = Array(droppedURLs.dropFirst())
+                    let firstPayload = Self.payloadForDroppedFile(firstURL)
                     DispatchQueue.main.async {
-                        self.payload = newPayload
+                        self.payload = firstPayload
                         self.expandWindow()
+                        for url in additionalURLs {
+                            self.onAdditionalDroppedFile(url)
+                        }
                     }
                     return true
                 }
