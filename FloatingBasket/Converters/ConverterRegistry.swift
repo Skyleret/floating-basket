@@ -15,12 +15,22 @@ public final class ConverterRegistry: Sendable {
         DocxConverter(),
         PlainTextConverter(),
         PdfConverter(),
+        PNGConverter(),
+        JPEGConverter(),
         HeicConverter()
     ]
     
     public init() {}
     
     public func converters(for payload: BasketPayload) -> [FileConverter] {
-        return registeredConverters.filter { $0.canHandle(payload: payload) }
+        var converters = registeredConverters.filter { $0.canHandle(payload: payload) }
+        
+        // The original file converter is bound to a specific source URL, so it is
+        // created per payload instead of living in the static registry.
+        if let sourceURL = payload.sourceFileURL {
+            converters.append(OriginalFileConverter(url: sourceURL))
+        }
+        
+        return converters
     }
 }

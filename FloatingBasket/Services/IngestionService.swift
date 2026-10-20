@@ -22,7 +22,10 @@ public final class IngestionService: Sendable {
                 // Handle Word Documents (.docx) -> Ingest as Text with markdown/formatting
                 if ext == "docx",
                    let attrStr = try? NSAttributedString(url: url, options: [.documentType: NSAttributedString.DocumentType.officeOpenXML], documentAttributes: nil) {
-                    payloads.append(.text(attrStr.string, metadata: ["sourceFile": url.lastPathComponent]))
+                    payloads.append(.text(attrStr.string, metadata: [
+                        "sourceFile": url.lastPathComponent,
+                        BasketPayload.sourceFileURLKey: url.path
+                    ]))
                     continue
                 }
                 
@@ -33,17 +36,31 @@ public final class IngestionService: Sendable {
                     continue
                 }
                 
-                let textExtensions = ["txt", "md", "rtf", "docx", "html", "xml"]
+                // Text and code files keep their contents as text while the full
+                // source path is retained so the original file can still be exported.
+                let textExtensions: Set<String> = [
+                    "txt", "md", "markdown", "rtf", "docx", "html", "htm", "xml",
+                    "json", "yml", "yaml", "toml", "ini", "cfg", "csv", "tsv",
+                    "py", "swift", "js", "jsx", "ts", "tsx", "c", "h", "cpp", "hpp",
+                    "m", "mm", "cs", "java", "kt", "kts", "go", "rs", "rb", "php",
+                    "sh", "bash", "zsh", "sql", "css", "scss"
+                ]
                 // Handle Text/Code Files (.txt, .md, .swift, .json, .html, etc.) -> Ingest as Text payload
                 if textExtensions.contains(ext) {
                     if ext == "docx",
                        let attrStr = try? NSAttributedString(url: url, options: [.documentType: NSAttributedString.DocumentType.officeOpenXML], documentAttributes: nil) {
-                        payloads.append(.text(attrStr.string, metadata: ["sourceFile": url.lastPathComponent]))
+                        payloads.append(.text(attrStr.string, metadata: [
+                            "sourceFile": url.lastPathComponent,
+                            BasketPayload.sourceFileURLKey: url.path
+                        ]))
                         continue
                     }
                     
                     if let textContent = try? String(contentsOf: url, encoding: .utf8) {
-                        payloads.append(.text(textContent, metadata: ["sourceFile": url.lastPathComponent]))
+                        payloads.append(.text(textContent, metadata: [
+                            "sourceFile": url.lastPathComponent,
+                            BasketPayload.sourceFileURLKey: url.path
+                        ]))
                         continue
                     }
                 }

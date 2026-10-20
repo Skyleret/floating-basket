@@ -28,18 +28,15 @@ public final class OriginalFileConverter: FileConverter, Sendable {
     }
     
     public func canHandle(payload: BasketPayload) -> Bool {
-        if case .file(let url) = payload, url == fileURL {
-            return true
-        }
-        return false
+        return payload.sourceFileURL == fileURL
     }
     
     public func convert(payload: BasketPayload) throws -> URL {
-        guard case .file(let url) = payload else {
+        guard let sourceURL = payload.sourceFileURL, sourceURL == fileURL else {
             throw NSError(domain: "FloatingBasket", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid payload type for Original File converter"])
         }
         
-        // Optional: If you want to copy it to a temp directory or just return the original URL
-        return url
+        // Return the original file untouched.
+        return sourceURL
     }
 }

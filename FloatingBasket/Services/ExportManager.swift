@@ -13,29 +13,12 @@ import AppKit
 public final class ExportManager {
     public static let shared = ExportManager()
     
-    private let textConverters: [FileConverter] = [
-        MarkdownConverter(),
-        PlainTextConverter(),
-        DocxConverter(),
-    ]
-    
-    private let imageConverters: [FileConverter] = [
-        PNGConverter(),
-        JPEGConverter()
-    ]
-    
     private init() {}
     
     public func converters(for payload: BasketPayload) -> [FileConverter] {
-        switch payload {
-        case .text:
-            return textConverters
-        case .image:
-            return imageConverters
-        case .file(let url):
-            // Return a converter that passes the original file through
-            return [OriginalFileConverter(url: url)]
-        }
+        // Single source of truth: each converter decides whether it applies via
+        // `canHandle(payload:)`, so new converters only need to be registered there.
+        return ConverterRegistry.shared.converters(for: payload)
     }
     
     public func export(payload: BasketPayload, using converter: FileConverter) throws -> URL {

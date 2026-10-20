@@ -158,7 +158,10 @@ public struct BasketIngestionWindowView: View {
            ) {
             return .text(
                 attributed.string,
-                metadata: ["sourceFile": url.lastPathComponent]
+                metadata: [
+                    "sourceFile": url.lastPathComponent,
+                    BasketPayload.sourceFileURLKey: url.path
+                ]
             )
         }
 
@@ -168,12 +171,15 @@ public struct BasketIngestionWindowView: View {
             return .image(image)
         }
 
-        // Text files: read their contents, not their path or clipboard.
-        if ["txt", "md", "html", "xml"].contains(ext),
+        // Text and code files: read their contents, not their path or clipboard.
+        if textExtensions.contains(ext),
            let content = try? String(contentsOf: url, encoding: .utf8) {
             return .text(
                 content,
-                metadata: ["sourceFile": url.lastPathComponent]
+                metadata: [
+                    "sourceFile": url.lastPathComponent,
+                    BasketPayload.sourceFileURLKey: url.path
+                ]
             )
         }
 
@@ -186,13 +192,24 @@ public struct BasketIngestionWindowView: View {
            ) {
             return .text(
                 attributed.string,
-                metadata: ["sourceFile": url.lastPathComponent]
+                metadata: [
+                    "sourceFile": url.lastPathComponent,
+                    BasketPayload.sourceFileURLKey: url.path
+                ]
             )
         }
 
         // Preserve unsupported file types as original files.
         return .file(url)
     }
+
+    private static let textExtensions: Set<String> = [
+        "txt", "md", "markdown", "html", "htm", "xml",
+        "json", "yml", "yaml", "toml", "ini", "cfg", "csv", "tsv",
+        "py", "swift", "js", "jsx", "ts", "tsx", "c", "h", "cpp", "hpp",
+        "m", "mm", "cs", "java", "kt", "kts", "go", "rs", "rb", "php",
+        "sh", "bash", "zsh", "sql", "css", "scss"
+    ]
     
     private func expandWindow() {
         guard !isExpanded else { return }
