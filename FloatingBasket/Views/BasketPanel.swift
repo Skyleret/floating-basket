@@ -333,10 +333,32 @@ public struct BasketIngestionWindowView: View {
         }
     }
 }
+private struct WindowAccessor: NSViewRepresentable {
+    let onResolve: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let window = view.window {
+                onResolve(window)
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async {
+            if let window = view.window {
+                onResolve(window)
+            }
+        }
+    }
+}
 
 public struct SingleItemWindowView: View {
     public let payload: BasketPayload
     private let exportManager = ExportManager.shared
+    @State private var hostingWindow: NSWindow?
     
     public init(payload: BasketPayload) {
         self.payload = payload
@@ -384,21 +406,30 @@ public struct SingleItemWindowView: View {
                     let converters = exportManager.converters(for: payload)
                     
                     if converters.isEmpty {
-                        FormatIconView(title: "Original", extensionLabel: "file", systemImage: "doc.fill") {
-                            if case .file(let url) = payload {
-                                return url
+                        FormatIconView(title: "Original", extensionLabel: "file", systemImage: "doc.fill",
+                            exportAction: {
+                                if case .file(let url) = payload {
+                                    return url
+                                }
+                                return nil
+                            },
+                            onDragStarted: {
+                                hostingWindow?.orderOut(nil)
                             }
-                            return nil
-                        }
+                        )
                     } else {
                         ForEach(converters, id: \.id) { converter in
                             FormatIconView(
                                 title: converter is OriginalFileConverter ? "Original" : "[\(converter.keyShortcut)]",
                                 extensionLabel: ".\(converter.targetExtension)",
-                                systemImage: iconName(for: converter.targetExtension)
-                            ) {
-                                try? exportManager.export(payload: payload, using: converter)
-                            }
+                                systemImage: iconName(for: converter.targetExtension),
+                                exportAction: {
+                                    try? exportManager.export(payload: payload, using: converter)
+                                },
+                                onDragStarted:{
+                                    hostingWindow?.orderOut(nil);
+                                }
+                            )
                         }
                     }
                 }
@@ -412,6 +443,13 @@ public struct SingleItemWindowView: View {
         .background(.ultraThinMaterial)
         .cornerRadius(14)
         .shadow(color: Color.black.opacity(0.25), radius: 10, x: 0, y: 5)
+        .background(
+            WindowAccessor { window in
+                if hostingWindow !== window {
+                    hostingWindow = window
+                }
+            }
+        )
     }
     
     private func iconName(for ext: String) -> String {
@@ -428,6 +466,7 @@ private struct FormatIconView: View {
     let extensionLabel: String
     let systemImage: String
     let exportAction: () -> URL?
+    let onDragStarted: () -> Void
     
     var body: some View {
         VStack(spacing: 2) {
@@ -452,18 +491,18 @@ private struct FormatIconView: View {
         )
         .contentShape(Rectangle())
         .onDrag {
-            if let fileURL = exportAction() {
-                DispatchQueue.main.async {
-                    NSApp.keyWindow?.orderOut(nil)
-                }
-                // `contentsOf:` registers the file's actual UTI (e.g.
-                // public.python-script) in addition to public.file-url, so the
-                // dragged item keeps its original format instead of becoming a
-                // generic URL/plain-text item.
-                return NSItemProvider(contentsOf: fileURL)
-                    ?? NSItemProvider(object: fileURL as NSURL)
+            guard let fileURL = exportAction() else {
+                return NSItemProvider()
             }
-            return NSItemProvider()
+
+            let provider = NSItemProvider(contentsOf: fileURL)
+                ?? NSItemProvider(object: fileURL as NSURL)
+
+            DispatchQueue.main.async {
+                onDragStarted()
+            }
+
+            return provider
         }
     }
 }
