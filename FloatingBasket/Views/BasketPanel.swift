@@ -9,6 +9,84 @@ import SwiftUI
 import AppKit
 internal import UniformTypeIdentifiers
 
+
+/// AppKit drop destination used to read Finder's raw dragging pasteboard.
+/// SwiftUI's NSItemProvider representation can omit the file URL even when
+/// the underlying Finder drag pasteboard contains one.
+private struct AppKitDropTarget: NSViewRepresentable {
+    @Binding var isTargeted: Bool
+    let onDrop: (NSPasteboard) -> Bool
+
+    func makeNSView(context: Context) -> DropView {
+        let view = DropView()
+        view.onTargetedChange = { targeted in
+            DispatchQueue.main.async {
+                self.isTargeted = targeted
+            }
+        }
+        view.onDrop = onDrop
+        return view
+    }
+
+    func updateNSView(_ nsView: DropView, context: Context) {
+        nsView.onDrop = onDrop
+        nsView.onTargetedChange = { targeted in
+            DispatchQueue.main.async {
+                self.isTargeted = targeted
+            }
+        }
+    }
+
+    final class DropView: NSView {
+        var onDrop: ((NSPasteboard) -> Bool)?
+        var onTargetedChange: ((Bool) -> Void)?
+
+        private let supportedTypes: [NSPasteboard.PasteboardType] = [
+            .fileURL,
+            .string,
+            NSPasteboard.PasteboardType("public.plain-text"),
+            .tiff,
+            .png
+        ]
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            registerForDraggedTypes(supportedTypes)
+        }
+
+        override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+            onTargetedChange?(true)
+            return accepts(sender.draggingPasteboard) ? .copy : []
+        }
+
+        override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+            accepts(sender.draggingPasteboard) ? .copy : []
+        }
+
+        override func draggingExited(_ sender: NSDraggingInfo?) {
+            onTargetedChange?(false)
+        }
+
+        override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+            accepts(sender.draggingPasteboard)
+        }
+
+        override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+            defer { onTargetedChange?(false) }
+            return onDrop?(sender.draggingPasteboard) ?? false
+        }
+
+        private func accepts(_ pasteboard: NSPasteboard) -> Bool {
+            guard let types = pasteboard.types else { return false }
+            return types.contains(.fileURL)
+                || types.contains(.string)
+                || types.contains(NSPasteboard.PasteboardType("public.plain-text"))
+                || types.contains(.tiff)
+                || types.contains(.png)
+        }
+    }
+}
+
 public final class BasketPanel: NSPanel {
     public init(contentRect: NSRect, backing: NSPanel.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: contentRect, styleMask: [.nonactivatingPanel, .borderless, .titled, .closable, .fullSizeContentView], backing: backing, defer: flag)
@@ -84,66 +162,51 @@ public struct BasketIngestionWindowView: View {
         )
         .shadow(color: Color.black.opacity(0.25), radius: 10, x: 0, y: 5)
         .contentShape(Rectangle()) // Ensures the entire box catches drops smoothly without gaps
-        .onDrop(
-            of: [UTType.fileURL, UTType.text, UTType.image],
-            isTargeted: $isHoveredOrTargeted
-        ) { providers in
-            guard let provider = providers.first else {
-                return false
-            }
-
-            // Prefer the actual dropped file URL over clipboard contents.
-            if provider.hasItemConformingToTypeIdentifier(
-                UTType.fileURL.identifier
-            ) {
-                provider.loadObject(ofClass: NSURL.self) { object, error in
-                    guard let url = object as? URL, error == nil else {
-                        print("FloatingBasket: Failed to read dropped file: \(error?.localizedDescription ?? "Unknown error")")
-                        return
-                    }
-
+        .background(
+            AppKitDropTarget(isTargeted: $isHoveredOrTargeted) { pasteboard in
+                // Prefer Finder's original file URL before considering text or image data.
+                if let objects = pasteboard.readObjects(
+                    forClasses: [NSURL.self],
+                    options: [.urlReadingFileURLsOnly: true]
+                ) as? [NSURL], let nsURL = objects.first {
+                    // Finder may provide a file-reference URL. Convert it to a
+                    // path-based file URL before passing it to the existing pipeline.
+                    let fileURL = nsURL as URL
+                    let url = fileURL.standardizedFileURL
                     let newPayload = Self.payloadForDroppedFile(url)
-
                     DispatchQueue.main.async {
                         self.payload = newPayload
                         self.expandWindow()
                     }
+                    return true
                 }
 
-                return true
-            }
-
-            // For non-file drops, load plain text if available.
-            if provider.canLoadObject(ofClass: NSString.self) {
-                provider.loadObject(ofClass: NSString.self) { object, error in
-                    guard let string = object as? String, error == nil else {
-                        return
-                    }
-
+                // Preserve support for text dragged from apps that provide text only.
+                let plainTextType = NSPasteboard.PasteboardType("public.plain-text")
+                if let string = pasteboard.string(forType: .string)
+                    ?? pasteboard.string(forType: plainTextType), !string.isEmpty {
                     DispatchQueue.main.async {
                         self.payload = BasketPayload.text(string)
                         self.expandWindow()
                     }
+                    return true
                 }
 
-                return true
-            }
-            if provider.canLoadObject(ofClass: NSImage.self) {
-                provider.loadObject(ofClass: NSImage.self) { object, error in
-                    guard let image = object as? NSImage, error == nil else {
-                        return
-                    }
-
+                // Preserve support for in-memory image drops.
+                if let images = pasteboard.readObjects(
+                    forClasses: [NSImage.self],
+                    options: nil
+                ) as? [NSImage], let image = images.first {
                     DispatchQueue.main.async {
                         self.payload = BasketPayload.image(image)
                         self.expandWindow()
                     }
+                    return true
                 }
 
-                return true
+                return false
             }
-            return false
-        }
+        )
     }
     
     static func payloadForDroppedFile(_ url: URL) -> BasketPayload {
