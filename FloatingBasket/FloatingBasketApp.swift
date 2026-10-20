@@ -42,8 +42,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         TempCleanupService.shared.startPeriodicCleanup()
         
         // Triggered when mouse shake + drag is detected
+        // Summon an empty drop target instead of reading the clipboard: the
+        // dragged item never lands on NSPasteboard and is delivered via onDrop.
         MouseShakeDetector.shared.onShakeWhileDraggingDetected = { [weak self] in
-            self?.handlePasteFromClipboard()
+            self?.handleShakeWhileDragging()
         }
         MouseShakeDetector.shared.startMonitoring()
     }
@@ -62,9 +64,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    public func spawnWindow(with payload: BasketPayload) {
+    /// Shows an empty basket that acts purely as a drop target. The dragged
+    /// item is delivered through the view's `onDrop` handler, so the clipboard
+    /// (which is only populated by an explicit copy) must not be consulted here.
+    public func handleShakeWhileDragging() {
+        spawnWindow()
+    }
+    
+    public func spawnWindow(with payload: BasketPayload? = nil) {
         let panel = BasketPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 120, height: 100), // Compact Ingestion Dropbox size
+            contentRect: NSRect(x: 0, y: 0, width: 240, height: 115), // Matches BasketIngestionWindowView's frame
             backing: .buffered,
             defer: false
         )

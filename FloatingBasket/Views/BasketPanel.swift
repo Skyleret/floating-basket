@@ -27,20 +27,20 @@ public final class BasketPanel: NSPanel {
 }
 
 public struct BasketIngestionWindowView: View {
-    @State private var payload: BasketPayload
+    @State private var payload: BasketPayload?
     @State private var isExpanded = false
     @State private var isHoveredOrTargeted = false
     @State private var mouseUpMonitor: Any?
     
     private let exportManager = ExportManager.shared
     
-    public init(payload: BasketPayload) {
+    public init(payload: BasketPayload? = nil) {
         _payload = State(initialValue: payload)
     }
     
     public var body: some View {
         Group {
-            if isExpanded {
+            if isExpanded, let payload = payload {
                 SingleItemWindowView(payload: payload)
             } else {
                 dropboxView
@@ -66,7 +66,7 @@ public struct BasketIngestionWindowView: View {
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(isHoveredOrTargeted ? .white : .primary)
             
-            Text(payload.displayTitle)
+            Text(payload?.displayTitle ?? "Drag a file here")
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
@@ -121,7 +121,7 @@ public struct BasketIngestionWindowView: View {
                     }
 
                     DispatchQueue.main.async {
-                        self.payload = .text(string)
+                        self.payload = BasketPayload.text(string)
                         self.expandWindow()
                     }
                 }
@@ -135,7 +135,7 @@ public struct BasketIngestionWindowView: View {
                     }
 
                     DispatchQueue.main.async {
-                        self.payload = .image(image)
+                        self.payload = BasketPayload.image(image)
                         self.expandWindow()
                     }
                 }
@@ -146,7 +146,7 @@ public struct BasketIngestionWindowView: View {
         }
     }
     
-    private static func payloadForDroppedFile(_ url: URL) -> BasketPayload {
+    static func payloadForDroppedFile(_ url: URL) -> BasketPayload {
         let ext = url.pathExtension.lowercased()
 
         // Word documents: extract their text.
@@ -242,15 +242,18 @@ public struct BasketIngestionWindowView: View {
         
         DispatchQueue.main.async {
             let mouseLocation = NSEvent.mouseLocation
-            if let window = NSApp.windows.first(where: { $0.frame.contains(mouseLocation) && $0 is BasketPanel }) {
-                // Dropped inside this window's frame
-                expandWindow()
-            } else {
-                // Dropped outside all ingestion windows -> Discard
-                NSApp.windows.forEach { window in
-                    if window is BasketPanel {
-                        window.orderOut(nil)
-                    }
+            let isInsideBasket = NSApp.windows.contains {
+                $0 is BasketPanel && $0.frame.contains(mouseLocation)
+            }
+            
+            // A mouse-up inside the dropbox is handled by onDrop, which ingests
+            // the dragged item and expands the window. Only discard the window
+            // when the drag ended outside of it.
+            guard !isInsideBasket else { return }
+            
+            NSApp.windows.forEach { window in
+                if window is BasketPanel {
+                    window.orderOut(nil)
                 }
             }
         }
@@ -379,7 +382,12 @@ private struct FormatIconView: View {
                 DispatchQueue.main.async {
                     NSApp.keyWindow?.orderOut(nil)
                 }
-                return NSItemProvider(object: fileURL as NSURL)
+                // `contentsOf:` registers the file's actual UTI (e.g.
+                // public.python-script) in addition to public.file-url, so the
+                // dragged item keeps its original format instead of becoming a
+                // generic URL/plain-text item.
+                return NSItemProvider(contentsOf: fileURL)
+                    ?? NSItemProvider(object: fileURL as NSURL)
             }
             return NSItemProvider()
         }

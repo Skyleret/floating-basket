@@ -85,6 +85,25 @@ struct FloatingBasketTests {
         #expect(converters.contains { $0.id == "original-file-converter" } == false)
     }
 
+    @MainActor
+    @Test func droppedCodeFileKeepsItsSourceFormatAndOffersOriginalFirst() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dropped-\\(UUID().uuidString).py")
+        try "print(\"hello\")".write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        // Simulates the payload produced by BasketIngestionWindowView.onDrop.
+        let payload = BasketIngestionWindowView.payloadForDroppedFile(url)
+
+        #expect(payload.sourceFileURL == url)
+
+        let converters = ConverterRegistry.shared.converters(for: payload)
+        let original = try #require(converters.first)
+        #expect(original.id == "original-file-converter")
+        #expect(original.targetExtension == "py")
+        #expect(try original.convert(payload: payload) == url)
+    }
+
     @Test func inMemoryImageHasNoOriginalFileOption() {
         let image = NSImage(size: NSSize(width: 1, height: 1))
         let converters = ConverterRegistry.shared.converters(for: .image(image))
