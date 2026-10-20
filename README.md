@@ -161,10 +161,3 @@ Key components include:
     and generating output formats.
 
 File names and responsibilities may change as the project evolves.
-
-## License
-
-No license has been specified in this README. Unless the repository
-includes a `LICENSE` file, assume the source is shared without blanket
-permission to reuse, modify, or redistribute it. Add a license file if
-you want to publish the project under explicit open-source terms.
