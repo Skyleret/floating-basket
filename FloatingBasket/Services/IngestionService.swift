@@ -32,7 +32,10 @@ public final class IngestionService: Sendable {
                 // Handle Image Files (.png, .jpg, .jpeg, .heic, .webp) -> Ingest as Image payload
                 if ["png", "jpg", "jpeg", "heic", "webp"].contains(ext),
                    let image = NSImage(contentsOf: url) {
-                    payloads.append(.image(image))
+                    payloads.append(.image(image, metadata: [
+                        "sourceFile": url.lastPathComponent,
+                        BasketPayload.sourceFileURLKey: url.path
+                    ]))
                     continue
                 }
                 

@@ -165,10 +165,17 @@ public struct BasketIngestionWindowView: View {
             )
         }
 
-        // Images: preserve them as image payloads.
+        // Images: preserve them as image payloads, keeping the source path so the
+        // original file can still be exported.
         if ["png", "jpg", "jpeg", "heic", "webp"].contains(ext),
            let image = NSImage(contentsOf: url) {
-            return .image(image)
+            return .image(
+                image,
+                metadata: [
+                    "sourceFile": url.lastPathComponent,
+                    BasketPayload.sourceFileURLKey: url.path
+                ]
+            )
         }
 
         // Text and code files: read their contents, not their path or clipboard.
@@ -309,7 +316,7 @@ public struct SingleItemWindowView: View {
                     } else {
                         ForEach(converters, id: \.id) { converter in
                             FormatIconView(
-                                title: "[\(converter.keyShortcut)]",
+                                title: converter is OriginalFileConverter ? "Original" : "[\(converter.keyShortcut)]",
                                 extensionLabel: ".\(converter.targetExtension)",
                                 systemImage: iconName(for: converter.targetExtension)
                             ) {

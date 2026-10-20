@@ -31,7 +31,7 @@ public final class HeicConverter: FileConverter, Sendable {
     }
     
     public func convert(payload: BasketPayload) throws -> URL {
-        guard case .image(let nsImage) = payload else {
+        guard case .image(let nsImage, _) = payload else {
             throw NSError(domain: "FloatingBasket", code: 106, userInfo: [NSLocalizedDescriptionKey: "Invalid payload type for HEIC converter"])
         }
         

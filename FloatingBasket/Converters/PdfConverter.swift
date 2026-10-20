@@ -81,7 +81,7 @@ public final class PdfConverter: FileConverter, Sendable {
             try (pdfData as Data).write(to: fileURL)
             return fileURL
             
-        case .image(let nsImage):
+        case .image(let nsImage, _):
             guard let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
                 throw NSError(domain: "FloatingBasket", code: 104, userInfo: [NSLocalizedDescriptionKey: "Failed to extract image for PDF conversion"])
             }

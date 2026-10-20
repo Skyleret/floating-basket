@@ -22,7 +22,7 @@ public final class PNGConverter: FileConverter, Sendable {
     }
     
     public func convert(payload: BasketPayload) throws -> URL {
-        guard case .image(let image) = payload else {
+        guard case .image(let image, _) = payload else {
             throw NSError(domain: "FloatingBasket", code: 200, userInfo: [NSLocalizedDescriptionKey: "Invalid payload type for PNG converter"])
         }
         
@@ -54,7 +54,7 @@ public final class JPEGConverter: FileConverter, Sendable {
     }
     
     public func convert(payload: BasketPayload) throws -> URL {
-        guard case .image(let image) = payload else {
+        guard case .image(let image, _) = payload else {
             throw NSError(domain: "FloatingBasket", code: 202, userInfo: [NSLocalizedDescriptionKey: "Invalid payload type for JPEG converter"])
         }
         
