@@ -55,12 +55,23 @@ private struct AppKitDropTarget: NSViewRepresentable {
         }
 
         override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+            guard accepts(sender.draggingPasteboard) else {
+                onTargetedChange?(false)
+                return []
+            }
+
             onTargetedChange?(true)
-            return accepts(sender.draggingPasteboard) ? .copy : []
+            return .copy
         }
 
         override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-            accepts(sender.draggingPasteboard) ? .copy : []
+            guard accepts(sender.draggingPasteboard) else {
+                onTargetedChange?(false)
+                return []
+            }
+
+            onTargetedChange?(true)
+            return .copy
         }
 
         override func draggingExited(_ sender: NSDraggingInfo?) {
@@ -125,7 +136,7 @@ public struct BasketIngestionWindowView: View {
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isExpanded)
-        .animation(.easeInOut(duration: 0.2), value: isHoveredOrTargeted)
+        //.animation(.easeInOut(duration: 0.2), value: isHoveredOrTargeted)
         .onAppear {
             setupMouseUpMonitor()
         }
