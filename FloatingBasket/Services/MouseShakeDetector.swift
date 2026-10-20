@@ -1,4 +1,3 @@
-
 //
 //  MouseShakeDetector.swift
 //  FloatingBasket
@@ -20,18 +19,26 @@ public final class MouseShakeDetector {
     private var shakeCount = 0
     private var lastDirection: CGFloat = 0
 
-    // Snapshot the drag pasteboard when each mouse drag begins.
-    // Old pasteboard contents must not qualify a new gesture as a drag.
+    // A drag is considered eligible only after the system drag pasteboard
+    // changes during the current mouse gesture. This avoids stale contents
+    // making ordinary text selections/canvas drags trigger the basket.
     private let dragPasteboard = NSPasteboard(name: .drag)
     private var dragPasteboardChangeCountAtMouseDown: Int?
     private var isCurrentGestureDraggingItem = false
+    private var didTriggerForCurrentGesture = false
+
+    // The activation zone is centered along the top of the screen's visible
+    // area. Using visibleFrame makes this portable across notched and non-notched
+    // Macs, different resolutions, and external displays.
+    private let pinZoneWidth: CGFloat = 180
+    private let pinZoneHeight: CGFloat = 48
+    private let pinZoneTopInset: CGFloat = 4
 
     public var onShakeWhileDraggingDetected: (() -> Void)?
 
     private init() {}
 
     public func startMonitoring() {
-        // Avoid installing duplicate monitors.
         guard globalEventMonitor == nil, localEventMonitor == nil else {
             return
         }
@@ -43,14 +50,12 @@ public final class MouseShakeDetector {
             .leftMouseDragged
         ]
 
-        // Events from other applications.
         globalEventMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: events
         ) { [weak self] event in
             self?.processEvent(event)
         }
 
-        // Events delivered to FloatingBasket itself.
         localEventMonitor = NSEvent.addLocalMonitorForEvents(
             matching: events
         ) { [weak self] event in
@@ -77,11 +82,8 @@ public final class MouseShakeDetector {
     private func processEvent(_ event: NSEvent) {
         switch event.type {
         case .leftMouseDown:
-            // Establish a fresh baseline for this gesture.
             resetGesture()
-            dragPasteboardChangeCountAtMouseDown =
-                dragPasteboard.changeCount
-            isCurrentGestureDraggingItem = false
+            dragPasteboardChangeCountAtMouseDown = dragPasteboard.changeCount
             return
 
         case .leftMouseUp:
@@ -121,16 +123,47 @@ public final class MouseShakeDetector {
             isCurrentGestureDraggingItem = true
         }
 
-        detectShake(at: NSEvent.mouseLocation)
+        guard !didTriggerForCurrentGesture else {
+            return
+        }
+
+        let currentPoint = NSEvent.mouseLocation
+
+        // Entering the top-center pin zone summons the normal empty intake
+        // window. The item is still dropped into that window through AppKitDropTarget.
+        if isInsidePinZone(currentPoint) {
+            triggerBasket()
+            return
+        }
+
+        detectShake(at: currentPoint)
+    }
+
+    private func isInsidePinZone(_ point: NSPoint) -> Bool {
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(point) })
+                ?? NSScreen.main else {
+            return false
+        }
+
+        let visible = screen.visibleFrame
+        let width = min(pinZoneWidth, visible.width)
+        let height = min(pinZoneHeight, visible.height)
+
+        let zone = NSRect(
+            x: visible.midX - width / 2,
+            y: visible.maxY - height - pinZoneTopInset,
+            width: width,
+            height: height
+        )
+
+        return zone.contains(point)
     }
 
     private func detectShake(at currentPoint: NSPoint) {
         let currentTime = CACurrentMediaTime()
 
         lastPositions.append((point: currentPoint, time: currentTime))
-        lastPositions.removeAll {
-            currentTime - $0.time >= 0.5
-        }
+        lastPositions.removeAll { currentTime - $0.time >= 0.5 }
 
         guard lastPositions.count > 5 else {
             return
@@ -149,15 +182,25 @@ public final class MouseShakeDetector {
             shakeCount += 1
 
             if shakeCount >= 4 {
-                resetShakeDetection()
-
-                DispatchQueue.main.async { [weak self] in
-                    self?.onShakeWhileDraggingDetected?()
-                }
+                triggerBasket()
+                return
             }
         }
 
         lastDirection = currentDirection
+    }
+
+    private func triggerBasket() {
+        guard !didTriggerForCurrentGesture else {
+            return
+        }
+
+        didTriggerForCurrentGesture = true
+        resetShakeDetection()
+
+        DispatchQueue.main.async { [weak self] in
+            self?.onShakeWhileDraggingDetected?()
+        }
     }
 
     private func resetShakeDetection() {
@@ -169,5 +212,6 @@ public final class MouseShakeDetector {
     private func resetGesture() {
         resetShakeDetection()
         isCurrentGestureDraggingItem = false
+        didTriggerForCurrentGesture = false
     }
 }
